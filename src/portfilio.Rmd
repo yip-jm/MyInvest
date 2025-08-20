@@ -1,0 +1,366 @@
+---
+title: "portfolio"
+author: "CHEN Zile"
+date: "2025-02-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 加载必要库
+
+```{r}
+library(xts)
+library(PerformanceAnalytics)
+library(quadprog)
+library(ggplot2)
+library(reshape2)
+library(fPortfolio)
+library(Rsolnp)
+library(paleoDiv)
+library(rlist)
+```
+
+# Read data
+
+```{r}
+fund_name_list <- list.files("data-china")
+fund_data_list <- list()
+for (filename in fund_name_list) {
+  fund_data_list <- list.append(fund_data_list, read.csv(paste("data-china/", filename, sep="")))
+}
+```
+
+```{r}
+fund_data_list <- list (
+  read.csv("贝莱德世界金融基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("贝莱德世界能源基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("贝莱德系统分析环球股票高息基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("富達基金 - 環球股息基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("富達基金 - 環球科技基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("富兰克林印度基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("瀚亚基金 - 日本动力股票基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("駿利亨德森環球生命科技基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("联博低波幅策略股票基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  #read.csv("木星全球基金 - 木星印度精選基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("施罗德环球持续增长.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  #read.csv("泰康开泰港元货币基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  #read.csv("泰康开泰海外短期债券基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  #read.csv("威灵顿美国优质增长基金.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y"))) %>% select(FSRQ, LJJZ),
+  read.csv("JPM美國科技（美元）－A股.csv") %>% mutate(FSRQ = as.Date(FSRQ, tryFormats = c("%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y")))
+)
+
+fund_name_list <- c(
+  "贝莱德世界金融基金.csv",
+  "贝莱德世界能源基金.csv",
+  "贝莱德系统分析环球股票高息基金.csv",
+  "富達基金 - 環球股息基金.csv",
+  "富達基金 - 環球科技基金.csv",
+  "富兰克林印度基金.csv",
+  "瀚亚基金 - 日本动力股票基金.csv",
+  "駿利亨德森環球生命科技基金.csv",
+  "联博低波幅策略股票基金.csv",
+  #"木星全球基金 - 木星印度精選基金.csv",
+  "施罗德环球持续增长.csv",
+  #"泰康开泰港元货币基金.csv",
+  #"泰康开泰海外短期债券基金.csv",
+  #"威灵顿美国优质增长基金.csv",
+  "JPM美國科技（美元）－A股.csv"
+)
+```
+
+
+# Data preprocessing
+处理缺失值，获取训练集，使用2024年之前的数据作为训练集。
+
+```{r}
+# ------------------------
+# 数据准备与收益率计算
+# ------------------------
+
+# 安装并加载必要的包
+if (!require("PerformanceAnalytics")) install.packages("PerformanceAnalytics")
+if (!require("nloptr")) install.packages("nloptr")
+if (!require("ggplot2")) install.packages("ggplot2")
+library(PerformanceAnalytics)
+library(nloptr)
+library(ggplot2)
+library(xts)
+
+# 假设已将数据读取到 fund_data_list 和 fund_name_list
+
+# 计算基金收益率
+returns_list <- lapply(fund_data_list, function(data) {
+  # 按日期排序
+  data <- data[order(data$FSRQ), ]
+  # 计算对数收益率
+  returns <- diff(log(data$LJJZ))
+  #returns <- data.frame(Date = format(data$FSRQ[-1], "%Y-%m-%d"), Return = returns)
+  returns <- data.frame(Date = data$FSRQ[-1], Return = returns)
+  return(returns)
+})
+
+
+# 合并收益率数据
+returns_df <- Reduce(function(x, y) merge(x, y, by = "Date", all.x = TRUE), returns_list)
+#returns_df <- Reduce(returns_list, inner_join, by = "Date")
+colnames(returns_df) <- c("Date", fund_name_list)
+
+# 转换为时间序列对象
+returns_xts <- xts(returns_df[, -1], order.by = as.Date(returns_df$Date))
+
+# 去除缺失值
+returns_xts <- na.omit(returns_xts)
+
+returns_xts_origin <- returns_xts
+```
+# Algo
+算法优化环节，达到指定年化收益率的前提下的最大夏普系数。
+
+```{r}
+algo <- function(returns_xts, annual_target_return, lower_bounds, upper_bounds, num_assets) {
+# 计算平均收益率和协方差矩阵
+mean_returns <- colMeans(returns_xts)
+cov_matrix <- cov(returns_xts)
+num_assets <- ncol(returns_xts)
+
+# ------------------------
+# 设置优化参数和约束
+# ------------------------
+
+# 1. 设定年化预期收益率下限
+daily_target_return <- annual_target_return / 252  # 转换为日收益率
+
+# 2. 设定单个基金的最小和最大权重
+lower_bounds <- rep(lower_bounds, num_assets)  # 最小投资比例 3%
+upper_bounds <- rep(upper_bounds, num_assets)   # 最大投资比例 30%
+
+# 3. 初始权重
+initial_weights <- rep(1 / num_assets, num_assets)
+
+# ------------------------
+# 定义优化问题
+# ------------------------
+
+# 目标函数：负的夏普比率
+objective_function <- function(weights, mean_returns, daily_target_return, cov_matrix) {
+  portfolio_return <- sum(mean_returns * weights)
+  portfolio_std <- sqrt(t(weights) %*% cov_matrix %*% weights)
+  sharpe_ratio <- portfolio_return / portfolio_std
+  return(-sharpe_ratio)  # 转换为最小化问题
+}
+
+# 等式约束：权重之和为 1
+equal_constraint <- function(weights, mean_returns, daily_target_return, cov_matrix) {
+  sum(weights) - 1
+}
+
+# 不等式约束：预期收益率不低于目标收益率
+inequal_constraint <- function(weights, mean_returns, daily_target_return, cov_matrix) {
+  constraint_value <- sum(mean_returns * weights) - daily_target_return
+  return(constraint_value)
+}
+
+# ------------------------
+# 使用 nloptr 进行优化
+# ------------------------
+
+# 调用 nloptr 进行优化
+result <- nloptr(
+  x0 = initial_weights,
+  eval_f = objective_function,
+  lb = lower_bounds,
+  ub = upper_bounds,
+  eval_g_eq = equal_constraint,
+  eval_g_ineq = inequal_constraint,
+  opts = list(
+    algorithm = "NLOPT_LN_COBYLA",
+    xtol_rel = 1e-8,
+    maxeval = 10000
+  ),
+  # 通过参数传递额外的参数
+  mean_returns = mean_returns,
+  cov_matrix = cov_matrix,
+  daily_target_return = daily_target_return
+)
+
+# 提取最优权重
+optimal_weights <- result$solution
+names(optimal_weights) <- colnames(returns_xts)
+
+# 输出最优权重
+cat("新的最优投资组合权重：\n")
+print(round(optimal_weights, 4))
+
+return(optimal_weights)
+}
+```
+
+算法2：达到指定收益率下的最小波动率
+```{r}
+algo_solve_QP <- function(returns_xts, annual_target_return, lower_bounds, upper_bounds) {
+  # 计算平均收益率和协方差矩阵
+  mean_returns <- colMeans(returns_xts)
+  cov_matrix <- cov(returns_xts)
+  num_assets <- ncol(returns_xts)
+  
+  # 转换为日收益率目标
+  daily_target_return <- annual_target_return / 252
+  
+  # 设置 Dmat（协方差矩阵）和 dvec（零向量）
+  Dmat <- 2 * cov_matrix  # 注意 solve.QP 需要乘以 2
+  dvec <- rep(0, num_assets)
+  
+  # 设置等式约束矩阵和向量
+  Amat <- cbind(
+    rep(1, num_assets),          # 权重之和为1
+    mean_returns,                 # 投资组合的预期收益率等于目标收益率
+    diag(1, num_assets),
+    -diag(1, num_assets)
+  )
+  bvec <- c(
+    1, 
+    daily_target_return,
+    rep(lower_bounds, num_assets),
+    rep(-upper_bounds, num_assets)
+  )
+  
+  # 添加不等式约束（权重上下限）
+  #Amat <- cbind(Amat, diag(num_assets), -diag(num_assets))
+  #bvec <- c(bvec, lower_bounds, -upper_bounds)
+  
+  # 调整 Amat 和 bvec 的方向，solve.QP 需要约束形式为 G'x ≥ b
+  # Amat <- t(Amat)
+  
+  # 解决二次规划问题
+  result <- solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
+  
+  # 提取最优权重
+  optimal_weights <- result$solution
+  names(optimal_weights) <- colnames(returns_xts)
+  
+  
+  # 输出最优权重
+  #cat("最优投资组合权重：\n")
+  #print(round(optimal_weights, 4))
+  
+  # 计算投资组合的预期收益率和波动率
+  #optimal_return <- sum(mean_returns * optimal_weights)
+  #optimal_volatility <- sqrt(t(optimal_weights) %*% cov_matrix %*% optimal_weights)
+  #optimal_weights <- c(optimal_weights, optimal_return, optimal_volatility)
+  #names(optimal_weights) <- c(colnames(returns_xts), "return", "volatility")
+  
+  #cat("\n投资组合的预期日收益率为：", round(optimal_return, 6), "\n")
+  #cat("投资组合的日波动率为：", round(optimal_volatility, 6), "\n")
+  
+  return(optimal_weights)
+}
+```
+
+# 效果评估
+使用刚刚 2024 年前数据训练出来的基金比例，放到2024年数据中测试，看看是否具有可靠性。
+```{r}
+Result <- data.frame()
+for (target_return in seq(0.04, 0.15, 0.01)) {
+  returns_xts <- returns_xts_origin#["20240101/"]
+  print(target_return)
+  optimal_weights <- algo_solve_QP(returns_xts, target_return, 0.0, 0.1)
+  portfolio_returns <- Return.portfolio(R = returns_xts, weights = optimal_weights)
+  name <- c(colnames(returns_xts), "return", "var", "sharpe ratio")
+  result <- c(optimal_weights, 
+                       Return.annualized(portfolio_returns) * 100, 
+                       StdDev.annualized(portfolio_returns) * 100, 
+                       SharpeRatio.annualized(portfolio_returns, Rf = 0)
+                       )
+  result <- round(result, 2)
+  names(result) <- name
+  Result <- rbind(Result, data.frame(as.list(result)))
+}
+write.csv(Result, "result.csv")
+```
+
+```{r}
+performance <- function(returns_xts, optimal_weights) {
+# 在训练集上评估性能
+# 计算投资组合的收益率
+portfolio_returns <- Return.portfolio(R = returns_xts, weights = optimal_weights)
+
+# 将投资组合收益率加入到收益率矩阵中
+returns_xts <- merge(returns_xts, Portfolio = portfolio_returns)
+
+# 再次打印列名，确认包含 "Portfolio"
+#print("加入投资组合后，returns_xts 的列名：")
+#print(colnames(returns_xts))
+
+# 计算绩效指标
+performance_table <- rbind(
+  "年化收益率" = Return.annualized(returns_xts) * 100,
+  "年化波动率" = StdDev.annualized(returns_xts) * 100,
+  "夏普比率" = SharpeRatio.annualized(returns_xts, Rf = 0),
+  "最大回撤" = maxDrawdown(returns_xts) * 100,
+  "索提诺比率" = SortinoRatio(returns_xts, MAR = 0)
+)
+
+# 转置表格以便查看
+performance_table <- t(performance_table)
+
+# 打印绩效指标
+cat("\n新的绩效指标（%）：\n")
+print(round(performance_table, 2))
+
+# ------------------------
+# 绘制累计收益率曲线
+# ------------------------
+
+# 调整列名顺序，确保子集操作正确
+all_columns <- c(colnames(returns_xts)[-ncol(returns_xts)], "Portfolio")
+
+# 绘制累计收益率曲线
+chart.CumReturns(returns_xts, legend.loc = "topleft",
+                 main = "调整后投资组合与各基金的累计收益率比较", 
+                 colorset = c(add.alpha(120:131, alpha=0.2), 1))
+
+# ------------------------
+# 绘制风险-收益散点图
+# ------------------------
+
+risk_return_data <- data.frame(
+  Annualized_Return = as.numeric(performance_table[, "Annualized Return"]),
+  Annualized_Volatility = as.numeric(performance_table[, "Annualized Standard Deviation"]),
+  Strategy = rownames(performance_table)
+)
+
+ggplot(risk_return_data, aes(x = Annualized_Volatility, y = Annualized_Return,
+                             color = Strategy, label = Strategy)) +
+  geom_point(size = 3) +
+  geom_text(nudge_y = 0.5, show.legend = FALSE) +
+  xlab("年化波动率（%）") +
+  ylab("年化收益率（%）") +
+ggtitle("风险-收益散点图") +
+  theme_minimal()
+
+#return (performance_table[,"portfolio.returns"])
+}
+
+# 准备测试集数据
+# 训练集是2024年之前的，测试集是2024年之后的
+#returns_xts <- returns_xts_origin["20240101/"]
+
+
+#performance(returns_xts, optimal_weights)
+
+```
+
+# 最终效果
+使用全部数据重新训练，得到最终权重：
+```{r}
+returns_xts <- returns_xts_origin["20180901/"]
+
+optimal_weights <- algo_solve_QP(returns_xts, 0.12, 0.0, 0.30)
+
+
+
+performance(returns_xts, optimal_weights)
+```
