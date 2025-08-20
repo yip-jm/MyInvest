@@ -116,7 +116,8 @@ class FundCrawler:
                     min_time = min(tmp, key=lambda x: x['FSRQ'])['FSRQ']
                     if min_time < max_time:
                         tmp = [i for i in tmp if i['FSRQ'] > max_time]
-                    df = pd.concat([df, tmp], ignore_index=True)
+                    tmp = pd.DataFrame(tmp)   # 转换成 DataFrame
+                    df = pd.concat([df, tmp], ignore_index=True)    
                     if min_time < max_time:
                         break
                     print("\r{:*^30}".format(' DOWNLOADING '), end='')
