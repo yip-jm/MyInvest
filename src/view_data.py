@@ -8,8 +8,8 @@ count = 1
 fig = 1
 fund_info = dict()
 
-for fn in os.listdir('..\\data-china'):
-    df = pd.read_csv(os.path.join('..\\data-china', fn))
+for fn in os.listdir('data-china'):
+    df = pd.read_csv(os.path.join('data-china', fn))
     df = df[df['FSRQ'] >= '2019-00-00']
     df['log_ret'] = np.log(pd.to_numeric(df['LJJZ']))
     k, b, r, p, err = ss.linregress(range(len(df), 0, -1), df['log_ret'].values)
