@@ -1,0 +1,4 @@
+fund_code,window_size,prediction_date,predicted_dwjz,predicted_jzzzl,directional_accuracy,predicted_volatility_std,last_known_date,last_known_dwjz,error_message
+002236,30,2025-08-22,3.1751,0.1930,0.5090,0.9433,2025-08-21,3.1690,
+002236,90,2025-08-22,3.1619,-0.2232,0.4935,0.9245,2025-08-21,3.1690,
+002236,180,2025-08-22,3.1738,0.1528,0.4937,1.8220,2025-08-21,3.1690,

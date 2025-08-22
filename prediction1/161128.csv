@@ -1,0 +1,4 @@
+fund_code,window_size,prediction_date,predicted_dwjz,predicted_jzzzl,directional_accuracy,predicted_volatility_std,last_known_date,last_known_dwjz,error_message
+161128,30,2025-08-21,5.3427,-1.2094,0.5010,0.7903,2025-08-20,5.4081,
+161128,90,2025-08-21,5.4153,0.1328,0.5202,0.8622,2025-08-20,5.4081,
+161128,180,2025-08-21,5.4248,0.3094,0.5281,1.2530,2025-08-20,5.4081,
