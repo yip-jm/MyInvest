@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=ollama_gpu_job  # Job name
-#SBATCH --output=log/%j.out
-#SBATCH --error=log/%j.err
+#SBATCH --output=log/x_%j.out
+#SBATCH --error=log/x_%j.err
 #SBATCH --time=3-00:00:00        # Max runtime (3 days)
 #SBATCH --nodes=1                # Use #number physical machines
 #SBATCH --ntasks=1               # 🔥 Run #number parallel python scripts when you have different settings
@@ -21,7 +21,7 @@ module load CUDA/12.1.1
 module load cuDNN/8.9.2.26-CUDA-12.1.1
 
 source ~/.bashrc
-source .venv/bin/activate
+source ../.venv/bin/activate
 # source activate worldtaskeval
 
 
@@ -35,7 +35,7 @@ echo "Using python: $(which python)"
 FILES_PER_TASK=12
 
 # !!! 核心修正: 使用SLURM_SUBMIT_DIR构建绝对路径 !!!
-DATA_DIR="$SLURM_SUBMIT_DIR/data-china"
+DATA_DIR="../data-china"
 files=($DATA_DIR/*.csv)
 TOTAL_FILES=${#files[@]}
 
@@ -68,7 +68,7 @@ for i in $(seq $START_INDEX $END_INDEX); do
     INPUT_FILE=${files[$i]}
     echo "  - 任务 $SLURM_ARRAY_TASK_ID 正在处理: ${INPUT_FILE}"
     # 调用python脚本处理单个文件
-    python "$SLURM_SUBMIT_DIR/main.py" "$INPUT_FILE"
+    python "$SLURM_SUBMIT_DIR/myxgboost.py" "$INPUT_FILE"
 done
 
 echo "任务ID $SLURM_ARRAY_TASK_ID: 已完成其文件块的处理。"

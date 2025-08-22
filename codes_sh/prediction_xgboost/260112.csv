@@ -1,0 +1,5 @@
+window_size,next_day_prediction_date,predicted_dwjz,predicted_jzzzl_pct,direction_accuracy_dwjz,direction_accuracy_jzzzl
+7,2025-08-22,2.5616,-0.56,45.83%,44.92%
+30,2025-08-22,2.5602,-0.22,47.53%,46.74%
+90,2025-08-22,2.5476,0.08,46.35%,47.53%
+180,2025-08-22,2.5479,0.47,48.18%,47.40%

@@ -108,7 +108,7 @@ def main():
     input_file_path = sys.argv[1]
     
     # 定义固定参数
-    output_directory = 'prediction1'
+    output_directory = 'predictions_arima'
     window_sizes_to_test = [30, 90, 180]
 
     # 确保输出目录存在
