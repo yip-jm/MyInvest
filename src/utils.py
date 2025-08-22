@@ -82,7 +82,7 @@ if __name__ == "__main__":
                 print(f"出错: {e}")
 
     # 保存为 JSON
-    out_file = "fund_names.json"
+    out_file = "../fund_names.json"
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 

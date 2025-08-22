@@ -1,158 +1,174 @@
-# -*- coding: utf-8 -*-
-# ARIMA-GARCH 滑动窗口滚动预测 DWJZ 和 JZZZL（%）
-# 输出 RMSE/MAE/MAPE/方向命中率
-# 依赖: pandas, numpy, pmdarima, arch, sklearn
-
 import pandas as pd
 import numpy as np
-from pmdarima import auto_arima
+import warnings
+import os
+import glob
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.arima.model import ARIMA
 from arch import arch_model
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from tqdm import tqdm
 
-# ---------------------------
-# 数据处理函数
-# ---------------------------
-def load_series(csv_path: str, date_col: str = "FSRQ", price_col: str = "DWJZ") -> pd.Series:
-    df = pd.read_csv(csv_path)
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df = df.dropna(subset=[date_col, price_col])
-    df = df.sort_values(date_col)
-    s = pd.to_numeric(df[price_col], errors="coerce").dropna()
-    s.index = df.loc[s.index, date_col].values
-    s = s[s > 0]
-    if len(s) < 20:
-        print("⚠️ 样本数较少，预测可能不稳定。")
-    return s
+# --- 全局设置 ---
+warnings.filterwarnings("ignore")
 
-def to_log_returns(price: pd.Series) -> pd.Series:
-    return np.log(price).diff().dropna()
+# --- 核心建模与预测函数 (这部分与之前版本相同) ---
 
-# ---------------------------
-# 模型拟合函数
-# ---------------------------
-def fit_arima_mean(r: pd.Series):
-    arima = auto_arima(
-        r, seasonal=False, stepwise=True,
-        suppress_warnings=True, error_action="ignore",
-        information_criterion="aic", max_p=3, max_q=3, max_d=1
-    )
-    mu_forecast, conf_int = arima.predict(n_periods=1, return_conf_int=True, alpha=0.05)
-    mu_hat = float(mu_forecast[0])
-    mu_in_sample = arima.predict_in_sample()
-    resid = r.iloc[-len(mu_in_sample):] - pd.Series(mu_in_sample, index=r.index[-len(mu_in_sample):])
-    return arima, mu_hat, resid
+def fit_predict_arima_garch(train_data):
+    """
+    在给定的训练数据上拟合ARIMA-GARCH模型并进行单步预测。
+    """
+    try:
+        p_value = adfuller(train_data)[1]
+        d = 1 if p_value >= 0.05 else 0
+        arima_model = ARIMA(train_data, order=(1, d, 1))
+        arima_fit = arima_model.fit()
+        residuals = arima_fit.resid
+        garch_model = arch_model(residuals, vol='Garch', p=1, q=1)
+        garch_fit = garch_model.fit(disp='off')
+        forecast_mean = arima_fit.forecast(steps=1).iloc[0]
+        garch_forecast = garch_fit.forecast(horizon=1)
+        forecast_variance = garch_forecast.variance.iloc[-1, 0]
+        return {"mean": forecast_mean, "variance": forecast_variance}
+    except Exception:
+        return None
 
-def fit_garch_variance(resid: pd.Series):
-    scale = 100.0
-    am = arch_model(resid * scale, mean="Zero", vol="GARCH", p=1, q=1, dist="normal")
-    res = am.fit(disp="off")
-    fcast = res.forecast(horizon=1)
-    var_next_scaled = fcast.variance.values[-1, 0]
-    var_next = (var_next_scaled / (scale ** 2))
-    sigma_next = float(np.sqrt(var_next))
-    return res, sigma_next
+def run_backtest(full_series, window_size, min_backtest_points=20):
+    """
+    执行滚动窗口回测来计算方向预测的准确率。
+    """
+    if len(full_series) < window_size + min_backtest_points:
+        return np.nan
 
-def combine_to_price_and_pct(last_price: float, mu_hat: float, sigma_hat: float, z: float = 1.96):
-    next_price = last_price * np.exp(mu_hat)
-    next_pct = (np.exp(mu_hat) - 1.0) * 100.0
-    lo_r = mu_hat - z * sigma_hat
-    hi_r = mu_hat + z * sigma_hat
-    price_lo = last_price * np.exp(lo_r)
-    price_hi = last_price * np.exp(hi_r)
-    pct_lo = (np.exp(lo_r) - 1.0) * 100.0
-    pct_hi = (np.exp(hi_r) - 1.0) * 100.0
-    return {
-        "pred_price": float(next_price),
-        "price_ci95": (float(price_lo), float(price_hi)),
-        "pred_pct": float(next_pct),
-        "pct_ci95": (float(pct_lo), float(pct_hi))
-    }
+    correct_predictions = 0
+    total_predictions = 0
 
-# ---------------------------
-# 滑动窗口滚动预测
-# ---------------------------
-def rolling_arima_garch(csv_path: str, window_size: int = 200, date_col: str = "FSRQ", price_col: str = "DWJZ"):
-    price = load_series(csv_path, date_col, price_col)
-    true_prices = []
-    pred_prices = []
-    pred_pct = []
-    true_pct = []
-    last_price = None
-
-    for i in range(window_size, len(price)):
-        train_window = price.iloc[i-window_size:i]
-        r_window = to_log_returns(train_window)
-        if len(r_window) < 5:  # 防止数据太少
+    for i in range(window_size, len(full_series)):
+        train_data = full_series.iloc[i - window_size : i]
+        actual_value = full_series.iloc[i]
+        try:
+            p_value = adfuller(train_data)[1]
+            d = 1 if p_value >= 0.05 else 0
+            arima_model = ARIMA(train_data, order=(1, d, 1))
+            arima_fit = arima_model.fit()
+            predicted_mean = arima_fit.forecast(steps=1).iloc[0]
+            if np.sign(predicted_mean) == np.sign(actual_value):
+                correct_predictions += 1
+            total_predictions += 1
+        except Exception:
             continue
+    
+    return correct_predictions / total_predictions if total_predictions > 0 else np.nan
 
-        # ARIMA 均值
-        arima_model, mu_hat, resid = fit_arima_mean(r_window)
-        # GARCH 方差
-        garch_model, sigma_hat = fit_garch_variance(resid)
+def process_fund_file(file_path, window_sizes):
+    """
+    处理单个基金文件：进行回测和最终预测。
+    """
+    try:
+        fund_code = os.path.basename(file_path).split('.')[0]
+        df = pd.read_csv(file_path, parse_dates=['FSRQ'])
+        df.dropna(subset=['JZZZL', 'DWJZ'], inplace=True)
+        df = df.sort_values(by='FSRQ').reset_index(drop=True)
 
-        # 预测下一日
-        last_price = train_window.iloc[-1]
-        out = combine_to_price_and_pct(last_price, mu_hat, sigma_hat)
+        if df.empty:
+            print(f"警告: 文件 {fund_code} 为空或无有效数据，已跳过。")
+            return []
 
-        # 保存
-        true_price = price.iloc[i]
-        true_prices.append(true_price)
-        pred_prices.append(out["pred_price"])
+        returns = df.set_index('FSRQ')['JZZZL']
+        last_date = df['FSRQ'].iloc[-1]
+        last_dwjz = df['DWJZ'].iloc[-1]
+        prediction_date = last_date + pd.Timedelta(days=1)
+        
+        fund_results = []
+        for window in window_sizes:
+            if len(returns) < window:
+                result = {
+                    "fund_code": fund_code, "window_size": window,
+                    "error_message": f"数据不足 (仅 {len(returns)} 条)",
+                }
+                fund_results.append(result)
+                continue
 
-        true_r = np.log(true_price / last_price)
-        true_pct.append(true_r * 100)
-        pred_pct.append(out["pred_pct"])
+            accuracy = run_backtest(returns, window)
+            prediction = fit_predict_arima_garch(returns.iloc[-window:])
+            
+            if prediction:
+                result = {
+                    "fund_code": fund_code, "window_size": window,
+                    "last_known_date": last_date.strftime('%Y-%m-%d'),
+                    "last_known_dwjz": last_dwjz,
+                    "prediction_date": prediction_date.strftime('%Y-%m-%d'),
+                    "predicted_jzzzl": prediction["mean"],
+                    "predicted_dwjz": last_dwjz * (1 + prediction["mean"] / 100),
+                    "predicted_volatility_std": np.sqrt(prediction["variance"]),
+                    "directional_accuracy": accuracy, "error_message": None,
+                }
+            else:
+                result = {
+                    "fund_code": fund_code, "window_size": window,
+                    "error_message": "最终预测模型拟合失败",
+                }
+            fund_results.append(result)
+        
+        return fund_results
+    except Exception as e:
+        fund_code = os.path.basename(file_path).split('.')[0]
+        print(f"处理文件 {fund_code} 时发生严重错误: {e}")
+        return [{"fund_code": fund_code, "error_message": str(e)}]
 
-    # ---------------------------
-    # 回测指标
-    # ---------------------------
-    true_prices = np.array(true_prices)
-    pred_prices = np.array(pred_prices)
-    true_pct = np.array(true_pct)
-    pred_pct = np.array(pred_pct)
+# --- 主处理流程 (这部分已更新) ---
 
-    mae_price = mean_absolute_error(true_prices, pred_prices)
-    rmse_price = np.sqrt(mean_squared_error(true_prices, pred_prices))
-    mape_price = np.mean(np.abs((true_prices - pred_prices) / true_prices)) * 100
+def main():
+    """
+    主执行函数：扫描文件，为每个文件独立处理并保存结果。
+    """
+    # --- 用户可配置参数 ---
+    DATA_DIRECTORY = 'data-china'  # 存放基金CSV文件的子文件夹
+    PREDICTION_DIRECTORY = 'prediction'  # 存放所有独立结果文件的文件夹
+    WINDOW_SIZES_TO_TEST = [30, 90, 180]  # 要测试的窗口大小
 
-    mae_pct = mean_absolute_error(true_pct, pred_pct)
-    rmse_pct = np.sqrt(mean_squared_error(true_pct, pred_pct))
-    mape_pct = np.mean(np.abs((true_pct - pred_pct) / (np.abs(true_pct)+1e-8))) * 100
+    # 1. 确保输出目录存在
+    os.makedirs(PREDICTION_DIRECTORY, exist_ok=True)
 
-    # 涨跌方向命中率
-    direction_true = np.sign(true_pct)
-    direction_pred = np.sign(pred_pct)
-    direction_acc = (direction_true == direction_pred).mean() * 100
+    # 2. 查找所有输入CSV文件
+    csv_files = glob.glob(os.path.join(DATA_DIRECTORY, '*.csv'))
+    
+    if not csv_files:
+        print(f"错误：在 '{DATA_DIRECTORY}' 文件夹中没有找到任何 .csv 文件。")
+        return
 
-    metrics = {
-        "RMSE_price": rmse_price,
-        "MAE_price": mae_price,
-        "MAPE_price%": mape_price,
-        "RMSE_pct": rmse_pct,
-        "MAE_pct": mae_pct,
-        "MAPE_pct%": mape_pct,
-        "Direction_acc%": direction_acc,
-        "num_predictions": len(pred_prices)
-    }
+    # 3. 循环处理每个文件，并立即保存结果
+    for file_path in tqdm(csv_files, desc="处理所有基金文件"):
+        # (A) 对当前文件进行预测和回测
+        fund_results = process_fund_file(file_path, WINDOW_SIZES_TO_TEST)
 
-    return pred_prices, pred_pct, metrics
+        # (B) 如果有结果，则将其保存到对应的文件中
+        if fund_results:
+            results_df = pd.DataFrame(fund_results)
+            
+            # (C) 确定输出文件的路径和名称
+            base_filename = os.path.basename(file_path)
+            output_path = os.path.join(PREDICTION_DIRECTORY, base_filename)
+            
+            # (D) 整理列顺序并保存
+            cols_order = [
+                "fund_code", "window_size", "prediction_date", "predicted_dwjz",
+                "predicted_jzzzl", "directional_accuracy", "predicted_volatility_std",
+                "last_known_date", "last_known_dwjz", "error_message"
+            ]
+            for col in cols_order:
+                if col not in results_df.columns:
+                    results_df[col] = np.nan
+            results_df = results_df[cols_order]
 
-# ---------------------------
-# 主函数示例
-# ---------------------------
-if __name__ == "__main__":
-    csv_path = "data-china\\004246.csv"  # 请替换为你的完整历史数据文件
-    window_size = 90      # 可调整窗口大小
-    pred_prices, pred_pct, metrics = rolling_arima_garch(csv_path, window_size)
+            results_df.to_csv(output_path, index=False, float_format='%.4f')
+    
+    # 4. 打印最终的总结信息
+    line_length = 60
+    print("\n" + "=" * line_length)
+    print(" " * 22 + "处理全部完成！")
+    print(f"所有基金的独立预测结果文件均已保存到 '{PREDICTION_DIRECTORY}' 文件夹中。")
+    print("=" * line_length)
 
-    print("\n=== 滑动窗口滚动预测指标 ===")
-    for k, v in metrics.items():
-        print(f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}")
 
-    # 可选：保存预测序列
-    df_pred = pd.DataFrame({
-        "pred_DWJZ": pred_prices,
-        "pred_JZZZL%": pred_pct
-    })
-    df_pred.to_csv("rolling_pred.csv", index=False)
-    print("\n预测序列已保存到 rolling_pred.csv")
+if __name__ == '__main__':
+    main()
