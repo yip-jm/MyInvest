@@ -35,7 +35,7 @@ echo "Using python: $(which python)"
 FILES_PER_TASK=12
 
 # !!! 核心修正: 使用SLURM_SUBMIT_DIR构建绝对路径 !!!
-DATA_DIR="../data-china"
+DATA_DIR="../data-china/funds"
 files=($DATA_DIR/*.csv)
 TOTAL_FILES=${#files[@]}
 
