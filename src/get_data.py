@@ -92,7 +92,7 @@ class FundCrawler:
 
     def run(self):
         if self.fount_info():
-            fn = 'data-china/' + self.file_name
+            fn = 'data-china/funds/' + self.file_name
             max_time = '0000-00-00'
             df = None
             if os.path.isfile(fn):
@@ -124,7 +124,7 @@ class FundCrawler:
                         break
                     print("\r{:*^30}".format(' DOWNLOADING '), end='')
             df = df.sort_values(by='FSRQ', ascending=False)
-            df.to_csv('data-china/' + self.file_name)
+            df.to_csv('data-china/funds/' + self.file_name)
             print("\r{:*^30}".format(' WORK DONE '))
             print("{:*^30}".format(' FILE NAME '))
             print("*{:^28}*".format(self.file_name))

@@ -26,10 +26,10 @@ library(rlist)
 # Read data
 
 ```{r}
-fund_name_list <- list.files("data-china")
+fund_name_list <- list.files("data-china/funds/")
 fund_data_list <- list()
 for (filename in fund_name_list) {
-  fund_data_list <- list.append(fund_data_list, read.csv(paste("data-china/", filename, sep="")))
+  fund_data_list <- list.append(fund_data_list, read.csv(paste("data-china/funds/", filename, sep="")))
 }
 ```
 

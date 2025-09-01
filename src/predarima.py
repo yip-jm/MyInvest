@@ -122,7 +122,7 @@ def main():
     主执行函数：扫描文件，为每个文件独立处理并保存结果。
     """
     # --- 用户可配置参数 ---
-    DATA_DIRECTORY = 'data-china'  # 存放基金CSV文件的子文件夹
+    DATA_DIRECTORY = 'data-china/funds'  # 存放基金CSV文件的子文件夹
     PREDICTION_DIRECTORY = 'prediction'  # 存放所有独立结果文件的文件夹
     WINDOW_SIZES_TO_TEST = [30, 90, 180]  # 要测试的窗口大小
 

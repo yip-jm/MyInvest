@@ -189,7 +189,7 @@ def main():
     主函数，执行所有操作。
     """
     # 定义路径和参数
-    INPUT_DIR = '../data-china'
+    INPUT_DIR = '../data-china/funds'
     OUTPUT_DIR = 'prediction_xgboost'
     WINDOW_SIZES = [7, 30, 90, 180]
 
